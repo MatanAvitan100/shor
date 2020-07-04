@@ -5,6 +5,8 @@
 import math
 import random
 import argparse
+import threading
+import time
 
 __author__ = "Todd Wildey"
 __copyright__ = "Copyright 2013"
@@ -66,8 +68,12 @@ class QubitRegister:
 		self.numBits = numBits
 		self.numStates = 1 << numBits
 		self.entangled = []
+		
+		print(str("+1\t" + str(self.numStates)))
 		self.states = [QuantumState(complex(0.0), self) for x in range(self.numStates)]
+		print(str("+2"))
 		self.states[0].amplitude = complex(1.0)
+		print(str("+3"))
 
 	def propagate(self, fromRegister = None):
 		if fromRegister is not None:
@@ -214,84 +220,146 @@ def qft(x, Q):
 
 	return codomain
 
-def findPeriod(a, N):
 
-	# start
-	r = 1
-	temp = a
-	while(True):
-		temp *= a 
+def pow_mod(a, b, n):
+	temp = 1
+	while b > 0:
+		temp = (temp * a) % n
+		b -= 1
+	return temp
+	
+Period = 0
+d = 0 
+def findPeriod_job(a, N, r_start, r_end):
+	global d
+	global Period
+	r = r_start
+	
+	temp =  (a ** r) % N # pow_mod(a, r-1, N)
+	print("findPeriod_job r_start\t" + str(r_start) + "\ttemp = " + str(temp))
+	while(r < r_end and Period == 0):
+		#print(str("findPeriod_job temp\t") + str(temp))
+		temp = (temp * a) % N
 		r += 1
-		
-		while(temp > N):
-			temp -= N
 			
-			
-		if temp == 1:
+		if temp == a:
+			r -= 1
+			d = r
+			Period = 1
+			print(str("found\t" + "r = " + str(r)))
 			break
-		
-	return r
 	
-	# end
 
-	
-	nNumBits = N.bit_length()
-	inputNumBits = (2 * nNumBits) - 1
-	inputNumBits += 1 if ((1 << inputNumBits) < (N * N)) else 0
-	Q = 1 << inputNumBits
+def findPeriod(a, N, pc = 2):
 
-	printInfo("Finding the period...")
-	printInfo("Q = " + str(Q) + "\ta = " + str(a))
-	
-	inputRegister = QubitRegister(inputNumBits)
-	hmdInputRegister = QubitRegister(inputNumBits)
-	qftInputRegister = QubitRegister(inputNumBits)
-	outputRegister = QubitRegister(inputNumBits)
+	if pc == 1:
+		r = 1
+		temp = a
+		while(True):
+			temp *= a 
+			r += 1
+			
+			if(temp > N):
+				temp %= N
+				
+			if temp == a:
+				r -= 1
+				break
+				
+	else:
+		if pc == 2:
+			max_treads = 14
+			r_start = 2
+			size = math.floor(a/max_treads)
+			global d
+			global Period
+			while(max_treads > 0):
+				t = threading.Thread(target=findPeriod_job, args=(a, N, r_start, r_start + size))
+				t.start()
+				r_start = r_start + size
+				# print("r = \t" + str(r))
+				max_treads -= 1 
+			while Period == 0:
+				pass
+			Period = 0
+			print("d = " + str(d))
+			return d
 
-	printInfo("Registers generated")
-	printInfo("Performing Hadamard on input register")
+		else:
+			if pc == 3:
+				r = math.floor(math.sqrt(N))
+				temp = a ** r
+				while(True):
+					# print(str(temp))
+					if(temp > N):
+						temp %= N
+						
+					if temp == a:
+						r -= 1
+						break
+					r -= 1
+					temp = a ** r
+			else:
+				nNumBits = N.bit_length()
+				inputNumBits = (2 * nNumBits) - 1
+				inputNumBits += 1 if ((1 << inputNumBits) < (N * N)) else 0
+				Q = 1 << inputNumBits
 
-	inputRegister.map(hmdInputRegister, lambda x: hadamard(x, Q), False)
-	# inputRegister.hadamard(False)
+				printInfo("Finding the period...")
+				printInfo("Q = " + str(Q) + "\ta = " + str(a))
+				printInfo("1")
+				inputRegister = QubitRegister(inputNumBits)
+				printInfo("1.1")
+				hmdInputRegister = QubitRegister(inputNumBits)
+				printInfo("1.2")
+				qftInputRegister = QubitRegister(inputNumBits)
+				printInfo("1.3")
+				outputRegister = QubitRegister(inputNumBits)
+				printInfo("2")
+				printInfo("Registers generated")
+				printInfo("Performing Hadamard on input register")
 
-	printInfo("Hadamard complete")
-	printInfo("Mapping input register to output register, where f(x) is a^x mod N")
+				inputRegister.map(hmdInputRegister, lambda x: hadamard(x, Q), False)
+				# inputRegister.hadamard(False)
+				printInfo("3")
+				printInfo("Hadamard complete")
+				printInfo("Mapping input register to output register, where f(x) is a^x mod N")
 
-	hmdInputRegister.map(outputRegister, lambda x: qModExp(a, x, N), False)
+				hmdInputRegister.map(outputRegister, lambda x: qModExp(a, x, N), False)
+				printInfo("4")
+				printInfo("Modular exponentiation complete")
+				printInfo("Performing quantum Fourier transform on output register")
 
-	printInfo("Modular exponentiation complete")
-	printInfo("Performing quantum Fourier transform on output register")
+				hmdInputRegister.map(qftInputRegister, lambda x: qft(x, Q), False)
+				inputRegister.propagate()
+				printInfo("5")
+				printInfo("Quantum Fourier transform complete")
+				printInfo("Performing a measurement on the output register")
 
-	hmdInputRegister.map(qftInputRegister, lambda x: qft(x, Q), False)
-	inputRegister.propagate()
+				y = outputRegister.measure()
 
-	printInfo("Quantum Fourier transform complete")
-	printInfo("Performing a measurement on the output register")
+				printInfo("Output register measured\ty = " + str(y))
 
-	y = outputRegister.measure()
+				# Interesting to watch - simply uncomment
+				# printAmplitudes(inputRegister)
+				# printAmplitudes(qftInputRegister)
+				# printAmplitudes(outputRegister)
+				# printEntangles(inputRegister)
 
-	printInfo("Output register measured\ty = " + str(y))
+				printInfo("Performing a measurement on the periodicity register")
+				printInfo("6")
+				x = qftInputRegister.measure()
 
-	# Interesting to watch - simply uncomment
-	# printAmplitudes(inputRegister)
-	# printAmplitudes(qftInputRegister)
-	# printAmplitudes(outputRegister)
-	# printEntangles(inputRegister)
+				printInfo("QFT register measured\tx = " + str(x))
 
-	printInfo("Performing a measurement on the periodicity register")
+				if x is None:
+					return None
 
-	x = qftInputRegister.measure()
-
-	printInfo("QFT register measured\tx = " + str(x))
-
-	if x is None:
-		return None
-
-	printInfo("Finding the period via continued fractions")
-
-	r = cf(x, Q, N)
-
-	printInfo("Candidate period\tr = " + str(r))
+				printInfo("Finding the period via continued fractions")
+				printInfo("7")
+				r = cf(x, Q, N)
+				printInfo("8")
+				printInfo("Candidate period\tr = " + str(r))
 
 	return r
 
@@ -301,7 +369,7 @@ def findPeriod(a, N):
 #                                                                                                   
 ####################################################################################################
 
-BIT_LIMIT = 99999
+BIT_LIMIT = 4096
 
 def bitCount(x):
 	sumBits = 0
@@ -404,21 +472,22 @@ def shors(N, attempts = 1, neighborhood = 0.0, numPeriods = 1):
 	printInfo("N = " + str(N))
 	printInfo("Neighborhood = " + str(neighborhood))
 	printInfo("Number of periods = " + str(numPeriods))
-
+	
 	for attempt in range(attempts):
-		printInfo("\nAttempt #" + str(attempt))
+		
 
-		a = pick(N)
+		a = pick(100)
 		while a < 2:
-			a = pick(N)
-
+			a = pick(100)
+		
 		d = gcd(a, N)
-		if d > 1:
-			printInfo("Found factors classically, re-attempt")
+		if d != 1:
+			printInfo("Found factors classically, re-attempt" + "\td = " + str((d)))
 			continue
 
+		printInfo("\nAttempt #" + str(attempt) + "\ta = " + str(a))
 		r = findPeriod(a, N)
-
+		
 		printInfo("Checking candidate period, nearby values, and multiples")
 
 		#r = checkCandidates(a, r, N, neighborhood)
@@ -433,10 +502,10 @@ def shors(N, attempts = 1, neighborhood = 0.0, numPeriods = 1):
 
 		d = modExp(a, (r // 2), N)
 		if r == 0 or d == (N - 1):
-			printInfo("Period was trivial, re-attempt")
+			printInfo("Period was trivial, re-attempt\t" + str(r))
 			continue
-
-		printInfo("Period found\tr = " + str(r))
+		
+		printInfo("Period found\tr = " + str(r) + "\ta = " + str(a))
 
 		periods.append(r)
 		if(len(periods) < numPeriods):
@@ -471,6 +540,16 @@ def parseArgs():
 	parser.add_argument('-v', '--verbose', type=bool, default=True, help='Verbose')
 	parser.add_argument('N', type=int, help='The integer to factor')
 	return parser.parse_args()
+
+
+
+# Example to n in 64 bits  4611686181636145867 = 2147483659*2147483713
+# Example to n in 256 bits 66963707291567831394035643318251127269547018692053310475567794104741546062371
+
+# Example to n in 512 bits 7481941016577287348099705569618881449446613674024887958060868042015962068162606112448282331657456711392343427317702862486293906907971066705762469196914429
+    
+# Example to n in 1024 bits 92562033715812759124114741736044283523381289941048932825510555468820581347335614003659313937583288939531366470214486407630811509181413157179309088380371985857285673607695187430424172796543432626204701421657401048700926260108171681237842250547938815679826497511311277132455416142287736205330601381198436096309
+
 
 def main():
 	args = parseArgs()
