@@ -248,9 +248,69 @@ def findPeriod_job(a, N, r_start, r_end):
 			Period = 1
 			print(str("found\t" + "r = " + str(r)))
 			break
-	
 
-def findPeriod(a, N, pc = 2):
+def modexp_rl(a, b, n):
+    r = 1
+    while 1:
+        if b % 2 == 1:
+            r = r * a % n
+        b /= 2
+        if b == 0:
+            break
+        a = a * a % n
+    return r
+
+
+def _bits_of_n(n):
+    """ Return the list of the bits in the binary
+        representation of n, from LSB to MSB
+    """
+    bits = []
+
+    while n:
+        bits.append(n % 2)
+        n /= 2
+
+    return bits
+
+def modexp_lr(a, b, n):
+    r = 1
+    for bit in reversed(_bits_of_n(b)):
+        r = r * r % n
+        if bit == 1:
+            r = r * a % n
+    return r
+
+
+def findPeriod_a(a, n, mask):
+
+    max = math.floor(n ** 0.5)
+    d = n & mask
+
+    f = modexp_rl(a, n - mask, n)
+
+    if max % 2 == 0:
+        p = max - 1
+    else:
+        p = max
+
+    print("About to file q or p ( f = " + str(f) + " )")
+
+    while d < n:
+        f = (f * a) % n
+        d = d + 1
+
+        if f == 1:
+            print("d = " + str(d))
+            break
+
+        if n % p == 0:
+            print("p = " + str(p))
+            break
+        else:
+            p = p - 2
+
+def findPeriod_b(a, N, pc = 2):
 
 	if pc == 1:
 		r = 1
@@ -486,7 +546,7 @@ def shors(N, attempts = 1, neighborhood = 0.0, numPeriods = 1):
 			continue
 
 		printInfo("\nAttempt #" + str(attempt) + "\ta = " + str(a))
-		r = findPeriod(a, N)
+		r = findPeriod_a(a, N, 0xffffffffffffffffffffffffffffffffff)
 		
 		printInfo("Checking candidate period, nearby values, and multiples")
 
@@ -541,7 +601,7 @@ def parseArgs():
 	parser.add_argument('N', type=int, help='The integer to factor')
 	return parser.parse_args()
 
-
+61946200040551647909307739416522924092963089258005512127033500484452131435148
 
 # Example to n in 64 bits  4611686181636145867 = 2147483659*2147483713
 # Example to n in 256 bits 61946200040551647909307739416522924093466643837971988782732316819163396610453 = 289798385584917605485498001977825965287 * 213756194381559050213318332733439210019
