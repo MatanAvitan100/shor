@@ -285,9 +285,14 @@ def modexp_lr(a, b, n):
 def findPeriod_a(a, n, mask):
 
     max = math.floor(n ** 0.5)
-    d = n & mask
+    exp = n - mask
 
-    f = modexp_rl(a, n - mask, n)
+    if exp % 2 == 1:
+        exp +=1
+
+    f = modexp_rl(a, exp, n)
+
+    d = exp
 
     if max % 2 == 0:
         p = max - 1
@@ -295,10 +300,10 @@ def findPeriod_a(a, n, mask):
         p = max
 
     print("About to file q or p ( f = " + str(f) + " )")
-
     while d < n:
-        f = (f * a) % n
-        d = d + 1
+        f = (((f * a) % n ) * a ) % n
+
+        d = d + 2
 
         if f == 1:
             print("d = " + str(d))
@@ -309,6 +314,10 @@ def findPeriod_a(a, n, mask):
             break
         else:
             p = p - 2
+
+    while d >= n:
+        d = 0;
+
 
 def findPeriod_b(a, N, pc = 2):
 
